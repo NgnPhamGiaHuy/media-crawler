@@ -1,0 +1,15 @@
+Flask[async]
+aiohttp
+beautifulsoup4
+Pillow
+python-dotenv
+requests
+validators
+aiofiles
+python-magic
+uvicorn
+Jinja2
+pytest
+gunicorn
+uuid
+pydantic

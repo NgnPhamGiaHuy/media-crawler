@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Media Crawler - Extract Media from Websites{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <div class="logo">
+        <i class="fas fa-spider"></i>
+        <h1>Media Crawler</h1>
+    </div>
+
+    <div class="search-container">
+        <form id="crawler-form">
+            <div class="input-wrapper">
+                <input type="url" id="url-input" name="url" placeholder="Enter a URL to crawl..."
+                    aria-label="URL to crawl" required>
+                <button type="submit" id="search-button" aria-label="Start crawling">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+
+            <div class="options-row">
+                <div class="depth-slider">
+                    <label for="depth-input">Crawl Depth: <span id="depth-value">0</span></label>
+                    <input type="range" id="depth-input" name="depth" min="0" max="3" value="0"
+                        aria-label="Crawl depth">
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="loader-container" style="display: none;">
+        <div class="spinner"></div>
+        <div class="progress-info">
+            <p id="crawl-status">Starting crawler...</p>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: 0%"></div>
+            </div>
+            <p><span id="media-found">0</span> media files found</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('crawler-form');
+        const depthInput = document.getElementById('depth-input');
+        const depthValue = document.getElementById('depth-value');
+        const loaderContainer = document.querySelector('.loader-container');
+        const crawlStatus = document.getElementById('crawl-status');
+        const mediaFound = document.getElementById('media-found');
+        const progressFill = document.querySelector('.progress-fill');
+
+        // Update depth value display
+        depthInput.addEventListener('input', () => {
+            depthValue.textContent = depthInput.value;
+        });
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const url = document.getElementById('url-input').value;
+            const depth = parseInt(depthInput.value);
+
+            if (!url) {
+                alert('Please enter a valid URL');
+                return;
+            }
+
+            // Show loader
+            loaderContainer.style.display = 'flex';
+            form.style.display = 'none';
+
+            // Start real-time status polling
+            startStatusPolling();
+
+            try {
+                // Start crawling
+                const response = await fetch('/api/crawl', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url, depth })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Redirect to results page
+                window.location.href = `/results?url=${encodeURIComponent(url)}`;
+
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+
+                // Hide loader and show form again
+                loaderContainer.style.display = 'none';
+                form.style.display = 'block';
+
+                // Stop polling
+                stopStatusPolling();
+            }
+        });
+
+        // Real-time status polling
+        let pollingInterval;
+        let isPolling = false;
+
+        function startStatusPolling() {
+            if (isPolling) return;
+
+            isPolling = true;
+            updateStatus(); // Update immediately
+
+            // Poll every 1 second
+            pollingInterval = setInterval(updateStatus, 1000);
+        }
+
+        function stopStatusPolling() {
+            isPolling = false;
+            clearInterval(pollingInterval);
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                if (data.status === 'active' && data.stats) {
+                    // Update media count from real data
+                    if (data.stats.media_count !== undefined) {
+                        mediaFound.textContent = data.stats.media_count;
+                    }
+
+                    // Update progress status based on current stage
+                    if (data.stats.current_stage) {
+                        crawlStatus.textContent = `${data.stats.current_stage}...`;
+                    }
+
+                    // Calculate progress percentage
+                    let progress = 0;
+                    if (data.stats.total_urls && data.stats.total_urls > 0) {
+                        progress = (data.stats.processed_urls / data.stats.total_urls) * 100;
+                    } else if (data.stats.processed_urls > 0) {
+                        // If we don't know total, use a simulated progress
+                        progress = Math.min(data.stats.processed_urls * 10, 90);
+                    }
+
+                    // Update progress bar
+                    progressFill.style.width = `${Math.min(progress, 100)}%`;
+                }
+
+                // If completed or redirected, stop polling
+                if (data.status !== 'active' || window.location.pathname !== '/') {
+                    stopStatusPolling();
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+    });
+</script>
+{% endblock %}

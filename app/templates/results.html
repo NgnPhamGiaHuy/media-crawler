@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+
+{% block title %}Media Results for {{ url }}{% endblock %}
+
+{% block content %}
+<div class="results-container">
+    <div class="results-header">
+        <h1>Media Results</h1>
+        <p class="source-url">Source: <a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></p>
+
+        <div class="crawl-statistics">
+            <div class="stat-card">
+                <i class="fas fa-check-circle success-icon"></i>
+                <div class="stat-content">
+                    <h3>{{ media|length }}</h3>
+                    <p>Files Successfully Crawled</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-times-circle error-icon"></i>
+                <div class="stat-content">
+                    <h3>{{ failed_count|default(0) }}</h3>
+                    <p>Files Failed</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-percentage"></i>
+                <div class="stat-content">
+                    {% set success_rate = (media|length / (media|length + failed_count|default(0)) * 100)|round if
+                    (media|length + failed_count|default(0)) > 0 else 100 %}
+                    <h3>{{ success_rate }}%</h3>
+                    <p>Success Rate</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="{{ url_for('main.index') }}" class="btn btn-secondary">
+                <i class="fas fa-search"></i> New Search
+            </a>
+            <a href="{{ url_for('main.clear_cache') }}" class="btn btn-danger">
+                <i class="fas fa-trash-alt"></i> Clear Cache
+            </a>
+        </div>
+
+        {% if media|length > 0 %}
+        <div class="filters">
+            <div class="filter-group">
+                <label for="filter-type">Filter by type:</label>
+                <select id="filter-type">
+                    <option value="all">All</option>
+                    <option value="image">Images</option>
+                    <option value="video">Videos</option>
+                    <option value="audio">Audio</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <input type="text" id="search-media" placeholder="Search filenames...">
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if media|length > 0 %}
+    <div class="media-grid">
+        {% for item in media %}
+        <div class="media-card" data-type="{{ item.media_type }}" data-filename="{{ item.filename }}">
+            <div class="media-preview">
+                {% set extension = item.filename.split('.')[-1]|lower if '.' in item.filename else '' %}
+                <div class="file-extension">{{ extension }}</div>
+
+                {% if item.media_type == 'image' %}
+                {% if item.filename.lower().endswith('.svg') %}
+                <object data="/media/{{ item.file_path.split('/')[-1] if item.file_path else '' }}" type="image/svg+xml"
+                    class="svg-preview">
+                    <img src="/thumbnail/{{ item.thumbnail_path.split('/')[-1] if item.thumbnail_path else '' }}"
+                        alt="{{ item.filename }}" loading="lazy">
+                </object>
+                {% else %}
+                <img src="/thumbnail/{{ item.thumbnail_path.split('/')[-1] if item.thumbnail_path else '' }}"
+                    alt="{{ item.filename }}" loading="lazy">
+                {% endif %}
+                {% elif item.media_type == 'video' %}
+                <div class="video-container">
+                    <video controls preload="none"
+                        poster="/thumbnail/{{ item.thumbnail_path.split('/')[-1] if item.thumbnail_path else '' }}"
+                        class="media-player">
+                        <source src="/media/{{ item.file_path.split('/')[-1] if item.file_path else '' }}"
+                            type="{{ item.metadata.mime_type if item.metadata and item.metadata.mime_type else 'video/mp4' }}">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="play-overlay">
+                        <i class="fas fa-play-circle"></i>
+                    </div>
+                </div>
+                {% elif item.media_type == 'audio' %}
+                <div class="audio-container">
+                    <audio controls preload="none" class="media-player">
+                        <source src="/media/{{ item.file_path.split('/')[-1] if item.file_path else '' }}"
+                            type="{{ item.metadata.mime_type if item.metadata and item.metadata.mime_type else 'audio/mpeg' }}">
+                        Your browser does not support the audio tag.
+                    </audio>
+                    <div class="audio-thumbnail">
+                        <img src="/thumbnail/{{ item.thumbnail_path.split('/')[-1] if item.thumbnail_path else '' }}"
+                            alt="{{ item.filename }}" loading="lazy">
+                        <i class="fas fa-music"></i>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="media-info">
+                <h3 class="media-title" title="{{ item.filename }}">{{ item.display_name }}</h3>
+
+                <div class="media-metadata">
+                    {% if item.metadata %}
+                    {% if item.metadata.width and item.metadata.height %}
+                    <span><i class="fas fa-ruler-combined"></i> {{ item.metadata.width }}x{{ item.metadata.height
+                        }}</span>
+                    {% endif %}
+
+                    {% if item.metadata.file_size %}
+                    <span><i class="fas fa-weight-hanging"></i> {{ (item.metadata.file_size / 1024)|round(1) }}
+                        KB</span>
+                    {% endif %}
+
+                    {% if item.metadata.duration %}
+                    <span><i class="fas fa-clock"></i> {{ item.metadata.duration|round(1) }}s</span>
+                    {% endif %}
+                    {% endif %}
+                </div>
+
+                <div class="media-actions">
+                    <a href="/media/{{ item.file_path.split('/')[-1] if item.file_path else '' }}"
+                        download="{{ item.filename }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-download"></i> Download
+                    </a>
+
+                    <a href="/media/{{ item.file_path.split('/')[-1] if item.file_path else '' }}" target="_blank"
+                        class="btn btn-secondary btn-sm">
+                        <i class="fas fa-external-link-alt"></i> View
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="pagination">
+        <button id="load-more" class="btn btn-secondary">Load More</button>
+    </div>
+    {% else %}
+    <div class="no-results">
+        <i class="fas fa-exclamation-circle"></i>
+        <h2>No media files found</h2>
+        <p>Try another URL or adjust the crawl depth to find more media.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Media filtering
+        const filterType = document.getElementById('filter-type');
+        const searchMedia = document.getElementById('search-media');
+        const mediaCards = document.querySelectorAll('.media-card');
+        const loadMoreBtn = document.getElementById('load-more');
+
+        // Items per page for pagination
+        const itemsPerPage = 12;
+        let currentPage = 1;
+
+        function filterMedia() {
+            const typeFilter = filterType.value;
+            const searchFilter = searchMedia.value.toLowerCase();
+
+            let visibleCount = 0;
+
+            mediaCards.forEach((card, index) => {
+                const cardType = card.dataset.type;
+                const cardFilename = card.dataset.filename.toLowerCase();
+
+                // Apply filters
+                const matchesType = typeFilter === 'all' || cardType === typeFilter;
+                const matchesSearch = !searchFilter || cardFilename.includes(searchFilter);
+
+                // Check if card passes all filters
+                const isVisible = matchesType && matchesSearch;
+
+                // First hide all cards
+                card.style.display = 'none';
+
+                // Only show cards that pass filters AND are within current page
+                if (isVisible) {
+                    visibleCount++;
+
+                    // Show cards for current page only
+                    if (visibleCount <= currentPage * itemsPerPage) {
+                        card.style.display = 'block';
+                    }
+                }
+            });
+
+            // Hide load more button if all visible items are displayed
+            if (visibleCount <= currentPage * itemsPerPage) {
+                loadMoreBtn.style.display = 'none';
+            } else {
+                loadMoreBtn.style.display = 'block';
+            }
+        }
+
+        // Initial filtering/pagination
+        filterMedia();
+
+        // Event listeners for filters
+        if (filterType) {
+            filterType.addEventListener('change', () => {
+                currentPage = 1; // Reset to first page on filter change
+                filterMedia();
+            });
+        }
+
+        if (searchMedia) {
+            searchMedia.addEventListener('input', () => {
+                currentPage = 1; // Reset to first page on search
+                filterMedia();
+            });
+        }
+
+        // Load more button
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', () => {
+                currentPage++;
+                filterMedia();
+            });
+        }
+
+        // Dark mode persistence
+        const isDarkMode = localStorage.getItem('darkMode') === 'true';
+        if (isDarkMode) {
+            document.body.classList.add('dark-mode');
+            document.getElementById('theme-toggle-btn').innerHTML = '<i class="fas fa-sun"></i>';
+        }
+
+        // Add lazy loading for video/audio
+        const playOverlays = document.querySelectorAll('.play-overlay');
+        playOverlays.forEach(overlay => {
+            overlay.addEventListener('click', function () {
+                const videoContainer = this.closest('.video-container');
+                const video = videoContainer.querySelector('video');
+
+                // Start loading the video
+                video.preload = 'auto';
+                video.load();
+
+                // Play the video
+                video.play();
+
+                // Hide the overlay
+                this.style.display = 'none';
+            });
+        });
+
+        const audioThumbnails = document.querySelectorAll('.audio-thumbnail');
+        audioThumbnails.forEach(thumbnail => {
+            thumbnail.addEventListener('click', function () {
+                const audioContainer = this.closest('.audio-container');
+                const audio = audioContainer.querySelector('audio');
+
+                // Start loading the audio
+                audio.preload = 'auto';
+                audio.load();
+
+                // Play the audio
+                audio.play();
+
+                // Hide the thumbnail overlay
+                this.style.opacity = '0.3';
+            });
+        });
+    });
+</script>
+
+<style>
+    /* Statistics styles */
+    .crawl-statistics {
+        display: flex;
+        justify-content: space-between;
+        margin: 1.5rem 0;
+        gap: 1rem;
+    }
+
+    .stat-card {
+        background-color: var(--card-bg);
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        flex: 1;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-card i {
+        font-size: 1.8rem;
+        margin-right: 1rem;
+    }
+
+    .success-icon {
+        color: #28a745;
+    }
+
+    .error-icon {
+        color: #dc3545;
+    }
+
+    .stat-content h3 {
+        font-size: 1.5rem;
+        margin: 0;
+        font-weight: 700;
+    }
+
+    .stat-content p {
+        margin: 0.2rem 0 0 0;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    /* File extension label */
+    .media-preview {
+        position: relative;
+    }
+
+    .file-extension {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background-color: rgba(0, 0, 0, 0.6);
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        text-transform: uppercase;
+        z-index: 5;
+        font-weight: bold;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    /* SVG display fixes */
+    .svg-preview {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background-color: white;
+        border-radius: 4px;
+    }
+
+    @media (max-width: 768px) {
+        .crawl-statistics {
+            flex-direction: column;
+        }
+
+        .stat-card {
+            margin-bottom: 0.5rem;
+        }
+    }
+
+    /* Video and audio player styles */
+    .video-container,
+    .audio-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: 8px 8px 0 0;
+        background-color: #000;
+    }
+
+    .video-container video {
+        width: 100%;
+        height: auto;
+        object-fit: contain;
+        max-height: 200px;
+    }
+
+    .play-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(0, 0, 0, 0.5);
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+    .play-overlay:hover {
+        background-color: rgba(0, 0, 0, 0.3);
+    }
+
+    .play-overlay i {
+        font-size: 3rem;
+        color: white;
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .audio-container {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .audio-container audio {
+        width: 100%;
+    }
+
+    .audio-thumbnail {
+        position: relative;
+        width: 100%;
+        min-height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .audio-thumbnail img {
+        width: 100%;
+        height: auto;
+        object-fit: cover;
+    }
+
+    .audio-thumbnail i {
+        position: absolute;
+        font-size: 2rem;
+        color: white;
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+
+        .video-container video,
+        .audio-container audio {
+            max-height: 150px;
+        }
+    }
+</style>
+{% endblock %}
